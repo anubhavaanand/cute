@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { getWeather } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
-import { traceCommandSyscalls } from './tracer.mjs';
+import { SyscallStreamer } from './tracer.mjs';
 const TerminalUI = () => {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState([]);
@@ -37,12 +37,10 @@ const TerminalUI = () => {
             // Get command journey
             const journeySteps = getCommandJourney(command);
             const journeyStr = formatJourneyCompact(journeySteps);
-            // Trace syscalls
-            const traceResult = await traceCommandSyscalls(command);
             // Get system info
             const username = process.env.USER || 'user';
             const currentDir = process.cwd().split('/').pop() || '~';
-            // Create status data
+            // Create initial status data
             const now = new Date();
             const timeStr = now.toLocaleTimeString('en-US', {
                 hour: '2-digit',
@@ -50,32 +48,97 @@ const TerminalUI = () => {
                 second: '2-digit',
                 hour12: false
             });
-            const status = {
+            const initialStatus = {
                 time: timeStr,
                 weather,
                 journey: journeyStr,
-                syscalls: traceResult.totalSyscalls,
+                journeyProgress: 0,
+                currentStep: 'parse',
+                syscalls: 0,
                 username,
                 currentDir,
-                traceResult
+                liveSyscalls: []
             };
-            setStatusData(status);
-            // Simulate command execution (in real implementation, this would actually run the command)
-            setTimeout(() => {
-                setOutput(prev => [...prev, `✓ Command completed: ${command}`]);
-                setIsExecuting(false);
-            }, 1000);
+            setStatusData(initialStatus);
+            // Create streaming tracer
+            const streamer = new SyscallStreamer(command);
+            // Set up event listeners for real-time updates
+            streamer.on('output', (data) => {
+                setOutput(prev => [...prev, data.trim()]);
+            });
+            streamer.on('syscall', (syscall) => {
+                setStatusData(prev => {
+                    if (!prev)
+                        return prev;
+                    const liveSyscalls = prev.liveSyscalls || [];
+                    const existingIndex = liveSyscalls.findIndex(s => s.name === syscall.name);
+                    if (existingIndex >= 0) {
+                        liveSyscalls[existingIndex] = {
+                            name: syscall.name,
+                            count: syscall.count,
+                            timestamp: syscall.timestamp
+                        };
+                    }
+                    else {
+                        liveSyscalls.push({
+                            name: syscall.name,
+                            count: syscall.count,
+                            timestamp: syscall.timestamp
+                        });
+                    }
+                    return {
+                        ...prev,
+                        syscalls: prev.syscalls + 1,
+                        liveSyscalls: liveSyscalls.slice(-10) // Keep last 10 syscalls
+                    };
+                });
+            });
+            streamer.on('progress', (progress) => {
+                setStatusData(prev => {
+                    if (!prev)
+                        return prev;
+                    return {
+                        ...prev,
+                        journeyProgress: progress.journeyProgress,
+                        currentStep: progress.currentStep,
+                        syscalls: progress.totalSyscalls,
+                        liveSyscalls: progress.syscallBreakdown.slice(-10).map(s => ({
+                            name: s.name,
+                            count: s.count,
+                            timestamp: Date.now()
+                        }))
+                    };
+                });
+            });
+            streamer.on('error', (error) => {
+                setOutput(prev => [...prev, `✗ Error: ${error.message}`]);
+            });
+            // Start streaming and wait for completion
+            const traceResult = await streamer.startStreaming();
+            // Update final status
+            setStatusData(prev => {
+                if (!prev)
+                    return prev;
+                return {
+                    ...prev,
+                    journeyProgress: 100,
+                    currentStep: 'complete',
+                    syscalls: traceResult.totalSyscalls,
+                    traceResult
+                };
+            });
+            setOutput(prev => [...prev, `✓ Command completed: ${command}`]);
+            setIsExecuting(false);
         }
         catch (error) {
             setOutput(prev => [...prev, `✗ Error: ${error instanceof Error ? error.message : String(error)}`]);
             setIsExecuting(false);
         }
     };
-    return (_jsxs(Box, { flexDirection: "column", height: "100%", children: [_jsx(Box, { borderStyle: "round", borderColor: "blue", padding: 1, children: _jsx(Text, { color: "blue", bold: true, children: "\uD83C\uDF1F Custom Terminal - Interactive Mode" }) }), statusData && (_jsx(Box, { borderStyle: "single", borderColor: "green", padding: 1, children: _jsxs(Text, { children: [statusData.time, " ", statusData.username, "@", statusData.currentDir, " \uD83C\uDF0D ", statusData.weather.description, " ", statusData.weather.temperature, "\u00B0C | \uD83D\uDCCD ", statusData.journey, " | \uD83D\uDCCA ", statusData.syscalls, " syscalls", statusData.traceResult && statusData.traceResult.syscallBreakdown.length > 0 && (_jsxs(Text, { color: "yellow", children: [' ', "[", statusData.traceResult.syscallBreakdown
-                                    .sort((a, b) => b.count - a.count)
-                                    .slice(0, 3)
-                                    .map(s => `${s.name}(${s.count})`)
-                                    .join(', '), "]"] }))] }) })), _jsxs(Box, { flexGrow: 1, flexDirection: "column", padding: 1, children: [_jsx(Text, { color: "gray", children: "Output:" }), output.map((line, index) => (_jsx(Text, { children: line }, index))), isExecuting && (_jsx(Text, { color: "yellow", children: "\u23F3 Executing..." }))] }), _jsx(Box, { borderStyle: "single", borderColor: "cyan", padding: 1, children: _jsxs(Text, { color: "cyan", children: ["$ ", input, _jsx(Text, { color: "gray", dimColor: true, children: isExecuting ? '' : '█' })] }) }), _jsx(Box, { padding: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "Press Enter to execute \u2022 Ctrl+C to exit \u2022 Type a command above" }) })] }));
+    return (_jsxs(Box, { flexDirection: "column", height: "100%", children: [_jsx(Box, { borderStyle: "round", borderColor: "blue", padding: 1, children: _jsx(Text, { color: "blue", bold: true, children: "\uD83C\uDF1F Custom Terminal - Interactive Mode" }) }), statusData && (_jsxs(Box, { borderStyle: "single", borderColor: "green", padding: 1, children: [_jsxs(Text, { children: [statusData.time, " ", statusData.username, "@", statusData.currentDir, " \uD83C\uDF0D ", statusData.weather.description, " ", statusData.weather.temperature, "\u00B0C | \uD83D\uDCCD ", statusData.journey, isExecuting && (_jsxs(Text, { color: "cyan", children: [' ', "(", statusData.journeyProgress, "% - ", statusData.currentStep, ")"] })), ' ', " | \uD83D\uDCCA ", statusData.syscalls, " syscalls", statusData.liveSyscalls && statusData.liveSyscalls.length > 0 && (_jsxs(Text, { color: "yellow", children: [' ', "[", statusData.liveSyscalls
+                                        .slice(-5) // Show last 5 live syscalls
+                                        .map(s => `${s.name}(${s.count})`)
+                                        .join(', '), "]"] }))] }), isExecuting && (_jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "Journey Progress: " }), _jsxs(Text, { color: "green", children: ["[", '█'.repeat(Math.floor(statusData.journeyProgress / 10)), '░'.repeat(10 - Math.floor(statusData.journeyProgress / 10)), "]", ' ', statusData.journeyProgress, "%"] })] }))] })), _jsxs(Box, { flexGrow: 1, flexDirection: "column", padding: 1, children: [_jsx(Text, { color: "gray", children: "Output:" }), output.map((line, index) => (_jsx(Text, { children: line }, index))), isExecuting && (_jsx(Text, { color: "yellow", children: "\u23F3 Executing..." }))] }), _jsx(Box, { borderStyle: "single", borderColor: "cyan", padding: 1, children: _jsxs(Text, { color: "cyan", children: ["$ ", input, _jsx(Text, { color: "gray", dimColor: true, children: isExecuting ? '' : '█' })] }) }), _jsx(Box, { padding: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "Press Enter to execute \u2022 Ctrl+C to exit \u2022 Type a command above" }) })] }));
 };
 // CLI entry point
 const runTerminalUI = () => {
@@ -91,13 +154,27 @@ const runTerminalUI = () => {
         // Run a simple demo command
         const demoCommand = 'echo "Hello from Custom Terminal!"';
         console.log(`$ ${demoCommand}`);
+        // Use streaming tracer for demo
+        const streamer = new SyscallStreamer(demoCommand);
+        let progressUpdates = 0;
+        streamer.on('progress', (progress) => {
+            progressUpdates++;
+            if (progressUpdates % 5 === 0) { // Update every 5 progress events
+                console.log(`⏳ Journey: ${progress.currentStep} (${progress.journeyProgress}%) - ${progress.totalSyscalls} syscalls`);
+            }
+        });
+        streamer.on('syscall', (syscall) => {
+            if (syscall.count % 10 === 0) { // Log every 10th occurrence of a syscall
+                console.log(`🔍 Syscall: ${syscall.name} (${syscall.count})`);
+            }
+        });
         // Simulate the execution flow
         setTimeout(async () => {
             try {
                 const weather = await getWeather();
                 const journeySteps = getCommandJourney(demoCommand.split(' ')[0]);
                 const journeyStr = formatJourneyCompact(journeySteps);
-                const traceResult = await traceCommandSyscalls(demoCommand);
+                const traceResult = await streamer.startStreaming();
                 const username = process.env.USER || 'user';
                 const currentDir = process.cwd().split('/').pop() || '~';
                 const now = new Date();
@@ -109,11 +186,11 @@ const runTerminalUI = () => {
                 });
                 console.log(`✓ Command completed: ${demoCommand}`);
                 console.log('');
-                console.log('📊 Status Summary:');
+                console.log('📊 Final Status Summary:');
                 console.log(`   Time: ${timeStr}`);
                 console.log(`   User: ${username}@${currentDir}`);
                 console.log(`   Weather: 🌤️ ${weather.description} ${weather.temperature}°C`);
-                console.log(`   Journey: 🧭 ${journeyStr}`);
+                console.log(`   Journey: 🧭 ${journeyStr} (100% complete)`);
                 console.log(`   Syscalls: 📊 ${traceResult.totalSyscalls} total`);
                 if (traceResult.syscallBreakdown.length > 0) {
                     const topSyscalls = traceResult.syscallBreakdown
@@ -135,6 +212,6 @@ const runTerminalUI = () => {
 // Export for use in other modules
 export { TerminalUI, runTerminalUI };
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (true || import.meta.url === `file://${process.argv[1]}`) {
     runTerminalUI();
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { getWeather } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
-import { traceCommandSyscalls } from './tracer.mjs';
+import { traceCommandSyscalls, SyscallStreamer, StreamingTraceResult } from './tracer.mjs';
 import { showStatusLine } from './overlay.mjs';
 
 interface WeatherData {
@@ -16,14 +16,21 @@ interface TraceResult {
   syscallBreakdown: Array<{ name: string; count: number }>;
 }
 
-interface StatusData {
+interface StreamingStatusData {
   time: string;
   weather: WeatherData;
   journey: string;
+  journeyProgress: number;
+  currentStep: string;
   syscalls: number;
   username: string;
   currentDir: string;
-  traceResult?: TraceResult;
+  traceResult?: TraceResult | StreamingTraceResult;
+  liveSyscalls?: Array<{ name: string; count: number; timestamp: number }>;
+}
+
+interface StatusData extends StreamingStatusData {
+  // StatusData inherits all properties from StreamingStatusData
 }
 
 const TerminalUI = () => {
@@ -61,14 +68,11 @@ const TerminalUI = () => {
       const journeySteps = getCommandJourney(command);
       const journeyStr = formatJourneyCompact(journeySteps);
 
-      // Trace syscalls
-      const traceResult = await traceCommandSyscalls(command);
-
       // Get system info
       const username = process.env.USER || 'user';
       const currentDir = process.cwd().split('/').pop() || '~';
 
-      // Create status data
+      // Create initial status data
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -77,23 +81,94 @@ const TerminalUI = () => {
         hour12: false
       });
 
-      const status: StatusData = {
+      const initialStatus: StreamingStatusData = {
         time: timeStr,
         weather,
         journey: journeyStr,
-        syscalls: traceResult.totalSyscalls,
+        journeyProgress: 0,
+        currentStep: 'parse',
+        syscalls: 0,
         username,
         currentDir,
-        traceResult
+        liveSyscalls: []
       };
 
-      setStatusData(status);
+      setStatusData(initialStatus);
 
-      // Simulate command execution (in real implementation, this would actually run the command)
-      setTimeout(() => {
-        setOutput(prev => [...prev, `✓ Command completed: ${command}`]);
-        setIsExecuting(false);
-      }, 1000);
+      // Create streaming tracer
+      const streamer = new SyscallStreamer(command);
+
+      // Set up event listeners for real-time updates
+      streamer.on('output', (data: string) => {
+        setOutput(prev => [...prev, data.trim()]);
+      });
+
+      streamer.on('syscall', (syscall: { name: string; count: number; timestamp: number; args: string; result: string }) => {
+        setStatusData(prev => {
+          if (!prev) return prev;
+          const liveSyscalls = prev.liveSyscalls || [];
+          const existingIndex = liveSyscalls.findIndex(s => s.name === syscall.name);
+
+          if (existingIndex >= 0) {
+            liveSyscalls[existingIndex] = {
+              name: syscall.name,
+              count: syscall.count,
+              timestamp: syscall.timestamp
+            };
+          } else {
+            liveSyscalls.push({
+              name: syscall.name,
+              count: syscall.count,
+              timestamp: syscall.timestamp
+            });
+          }
+
+          return {
+            ...prev,
+            syscalls: prev.syscalls + 1,
+            liveSyscalls: liveSyscalls.slice(-10) // Keep last 10 syscalls
+          };
+        });
+      });
+
+      streamer.on('progress', (progress: { journeyProgress: number; currentStep: string; totalSyscalls: number; syscallBreakdown: Array<{ name: string; count: number }> }) => {
+        setStatusData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            journeyProgress: progress.journeyProgress,
+            currentStep: progress.currentStep,
+            syscalls: progress.totalSyscalls,
+            liveSyscalls: progress.syscallBreakdown.slice(-10).map(s => ({
+              name: s.name,
+              count: s.count,
+              timestamp: Date.now()
+            }))
+          };
+        });
+      });
+
+      streamer.on('error', (error: Error) => {
+        setOutput(prev => [...prev, `✗ Error: ${error.message}`]);
+      });
+
+      // Start streaming and wait for completion
+      const traceResult = await streamer.startStreaming();
+
+      // Update final status
+      setStatusData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          journeyProgress: 100,
+          currentStep: 'complete',
+          syscalls: traceResult.totalSyscalls,
+          traceResult
+        };
+      });
+
+      setOutput(prev => [...prev, `✓ Command completed: ${command}`]);
+      setIsExecuting(false);
 
     } catch (error) {
       setOutput(prev => [...prev, `✗ Error: ${error instanceof Error ? error.message : String(error)}`]);
@@ -114,19 +189,34 @@ const TerminalUI = () => {
       {statusData && (
         <Box borderStyle="single" borderColor="green" padding={1}>
           <Text>
-            {statusData.time} {statusData.username}@{statusData.currentDir} 🌍 {statusData.weather.description} {statusData.weather.temperature}°C | 📍 {statusData.journey} | 📊 {statusData.syscalls} syscalls
-            {statusData.traceResult && statusData.traceResult.syscallBreakdown.length > 0 && (
+            {statusData.time} {statusData.username}@{statusData.currentDir} 🌍 {statusData.weather.description} {statusData.weather.temperature}°C | 📍 {statusData.journey}
+            {isExecuting && (
+              <Text color="cyan">
+                {' '}({statusData.journeyProgress}% - {statusData.currentStep})
+              </Text>
+            )}
+            {' '} | 📊 {statusData.syscalls} syscalls
+            {statusData.liveSyscalls && statusData.liveSyscalls.length > 0 && (
               <Text color="yellow">
                 {' '}[
-                {statusData.traceResult.syscallBreakdown
-                  .sort((a, b) => b.count - a.count)
-                  .slice(0, 3)
+                {statusData.liveSyscalls
+                  .slice(-5) // Show last 5 live syscalls
                   .map(s => `${s.name}(${s.count})`)
                   .join(', ')}
                 ]
               </Text>
             )}
           </Text>
+          {/* Journey Progress Bar */}
+          {isExecuting && (
+            <Box marginTop={1}>
+              <Text color="gray">Journey Progress: </Text>
+              <Text color="green">
+                [{'█'.repeat(Math.floor(statusData.journeyProgress / 10))}{'░'.repeat(10 - Math.floor(statusData.journeyProgress / 10))}]
+                {' '}{statusData.journeyProgress}%
+              </Text>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -176,13 +266,30 @@ const runTerminalUI = () => {
     const demoCommand = 'echo "Hello from Custom Terminal!"';
     console.log(`$ ${demoCommand}`);
 
+    // Use streaming tracer for demo
+    const streamer = new SyscallStreamer(demoCommand);
+    let progressUpdates = 0;
+
+    streamer.on('progress', (progress: { journeyProgress: number; currentStep: string; totalSyscalls: number }) => {
+      progressUpdates++;
+      if (progressUpdates % 5 === 0) { // Update every 5 progress events
+        console.log(`⏳ Journey: ${progress.currentStep} (${progress.journeyProgress}%) - ${progress.totalSyscalls} syscalls`);
+      }
+    });
+
+    streamer.on('syscall', (syscall: { name: string; count: number }) => {
+      if (syscall.count % 10 === 0) { // Log every 10th occurrence of a syscall
+        console.log(`🔍 Syscall: ${syscall.name} (${syscall.count})`);
+      }
+    });
+
     // Simulate the execution flow
     setTimeout(async () => {
       try {
         const weather = await getWeather();
         const journeySteps = getCommandJourney(demoCommand.split(' ')[0]);
         const journeyStr = formatJourneyCompact(journeySteps);
-        const traceResult = await traceCommandSyscalls(demoCommand);
+        const traceResult = await streamer.startStreaming();
 
         const username = process.env.USER || 'user';
         const currentDir = process.cwd().split('/').pop() || '~';
@@ -196,11 +303,11 @@ const runTerminalUI = () => {
 
         console.log(`✓ Command completed: ${demoCommand}`);
         console.log('');
-        console.log('📊 Status Summary:');
+        console.log('📊 Final Status Summary:');
         console.log(`   Time: ${timeStr}`);
         console.log(`   User: ${username}@${currentDir}`);
         console.log(`   Weather: 🌤️ ${weather.description} ${weather.temperature}°C`);
-        console.log(`   Journey: 🧭 ${journeyStr}`);
+        console.log(`   Journey: 🧭 ${journeyStr} (100% complete)`);
         console.log(`   Syscalls: 📊 ${traceResult.totalSyscalls} total`);
         if (traceResult.syscallBreakdown.length > 0) {
           const topSyscalls = traceResult.syscallBreakdown
@@ -223,6 +330,6 @@ const runTerminalUI = () => {
 export { TerminalUI, runTerminalUI };
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (true || import.meta.url === `file://${process.argv[1]}`) {
   runTerminalUI();
 }
