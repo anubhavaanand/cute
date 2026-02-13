@@ -1,0 +1,17 @@
+{
+  "name": "custom-terminal",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/mvp-demo.js",
+  "scripts": {
+    "start": "node dist/mvp-demo.js",
+    "build": "tsc mvp-demo.ts --outDir dist"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
