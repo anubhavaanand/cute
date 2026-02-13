@@ -3,7 +3,8 @@ import { render, Box, Text, useInput, useApp } from 'ink';
 import { getWeather } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
 import { traceCommandSyscalls, SyscallStreamer, StreamingTraceResult } from './tracer.mjs';
-import { showStatusLine } from './overlay.mjs';
+import { showStatusBar } from './overlay.mjs';
+import { mcpClient, MCPSuggestion } from './mcp-client';
 
 interface WeatherData {
   description: string;
@@ -27,6 +28,7 @@ interface StreamingStatusData {
   currentDir: string;
   traceResult?: TraceResult | StreamingTraceResult;
   liveSyscalls?: Array<{ name: string; count: number; timestamp: number }>;
+  mcpSuggestions?: MCPSuggestion[];
 }
 
 interface StatusData extends StreamingStatusData {
@@ -39,6 +41,23 @@ const TerminalUI = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [statusData, setStatusData] = useState<StatusData | null>(null);
   const { exit } = useApp();
+
+  // Get MCP suggestions when input changes
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (input.trim().length > 0) {
+        try {
+          const suggestions = await mcpClient.getCommandSuggestions(input);
+          setStatusData(prev => prev ? { ...prev, mcpSuggestions: suggestions } : null);
+        } catch (error) {
+          // Ignore MCP errors
+        }
+      } else {
+        setStatusData(prev => prev ? { ...prev, mcpSuggestions: [] } : null);
+      }
+    };
+    fetchSuggestions();
+  }, [input]);
 
   // Handle keyboard input
   useInput((inputChar, key) => {
@@ -217,6 +236,19 @@ const TerminalUI = () => {
               </Text>
             </Box>
           )}
+        </Box>
+      )}
+
+      {/* MCP Suggestions */}
+      {statusData?.mcpSuggestions && statusData.mcpSuggestions.length > 0 && (
+        <Box borderStyle="single" borderColor="magenta" padding={1}>
+          <Text color="magenta" bold>🤖 AI Suggestions:</Text>
+          {statusData.mcpSuggestions.slice(0, 3).map((suggestion, index) => (
+            <Box key={index} marginTop={0}>
+              <Text color="cyan">{suggestion.command}</Text>
+              <Text color="gray"> - {suggestion.description}</Text>
+            </Box>
+          ))}
         </Box>
       )}
 
