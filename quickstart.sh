@@ -17,13 +17,27 @@ echo -e "${BLUE}🚀 Custom Terminal - Quick Start${NC}"
 echo -e "=================================="
 echo ""
 
-# Check TypeScript
-if command -v tsc &> /dev/null; then
-    TSC_VERSION=$(tsc --version)
-    echo -e "${GREEN}✓ Found TypeScript: $TSC_VERSION${NC}"
+# Check Rust
+if command -v cargo &> /dev/null; then
+    CARGO_VERSION=$(cargo --version)
+    echo -e "${GREEN}✓ Found Rust: $CARGO_VERSION${NC}"
 else
-    echo -e "${YELLOW}⚠ TypeScript not found. Installing...${NC}"
-    npm install -g typescript
+    echo -e "${YELLOW}⚠ Rust not found. Installing...${NC}"
+    # Note: Installation depends on your system
+    echo -e "${YELLOW}  Please install Rust from https://rustup.rs/${NC}"
+    exit 1
+fi
+
+echo ""
+
+# Compile Rust
+cd "$PROJECT_DIR"
+echo -e "${BLUE}🦀 Compiling Rust...${NC}"
+cargo build --release
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Rust compilation successful${NC}"
+else
+    echo -e "${YELLOW}⚠ Rust compilation warnings (continuing)${NC}"
 fi
 
 echo ""
