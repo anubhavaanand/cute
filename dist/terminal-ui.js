@@ -1,15 +1,34 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { getWeather } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
 import { SyscallStreamer } from './tracer.mjs';
+import { mcpClient } from './mcp-client';
 const TerminalUI = () => {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState([]);
     const [isExecuting, setIsExecuting] = useState(false);
     const [statusData, setStatusData] = useState(null);
     const { exit } = useApp();
+    // Get MCP suggestions when input changes
+    useEffect(() => {
+        const fetchSuggestions = async () => {
+            if (input.trim().length > 0) {
+                try {
+                    const suggestions = await mcpClient.getCommandSuggestions(input);
+                    setStatusData(prev => prev ? { ...prev, mcpSuggestions: suggestions } : null);
+                }
+                catch (error) {
+                    // Ignore MCP errors
+                }
+            }
+            else {
+                setStatusData(prev => prev ? { ...prev, mcpSuggestions: [] } : null);
+            }
+        };
+        fetchSuggestions();
+    }, [input]);
     // Handle keyboard input
     useInput((inputChar, key) => {
         if (key.return) {
@@ -138,7 +157,7 @@ const TerminalUI = () => {
     return (_jsxs(Box, { flexDirection: "column", height: "100%", children: [_jsx(Box, { borderStyle: "round", borderColor: "blue", padding: 1, children: _jsx(Text, { color: "blue", bold: true, children: "\uD83C\uDF1F Custom Terminal - Interactive Mode" }) }), statusData && (_jsxs(Box, { borderStyle: "single", borderColor: "green", padding: 1, children: [_jsxs(Text, { children: [statusData.time, " ", statusData.username, "@", statusData.currentDir, " \uD83C\uDF0D ", statusData.weather.description, " ", statusData.weather.temperature, "\u00B0C | \uD83D\uDCCD ", statusData.journey, isExecuting && (_jsxs(Text, { color: "cyan", children: [' ', "(", statusData.journeyProgress, "% - ", statusData.currentStep, ")"] })), ' ', " | \uD83D\uDCCA ", statusData.syscalls, " syscalls", statusData.liveSyscalls && statusData.liveSyscalls.length > 0 && (_jsxs(Text, { color: "yellow", children: [' ', "[", statusData.liveSyscalls
                                         .slice(-5) // Show last 5 live syscalls
                                         .map(s => `${s.name}(${s.count})`)
-                                        .join(', '), "]"] }))] }), isExecuting && (_jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "Journey Progress: " }), _jsxs(Text, { color: "green", children: ["[", '█'.repeat(Math.floor(statusData.journeyProgress / 10)), '░'.repeat(10 - Math.floor(statusData.journeyProgress / 10)), "]", ' ', statusData.journeyProgress, "%"] })] }))] })), _jsxs(Box, { flexGrow: 1, flexDirection: "column", padding: 1, children: [_jsx(Text, { color: "gray", children: "Output:" }), output.map((line, index) => (_jsx(Text, { children: line }, index))), isExecuting && (_jsx(Text, { color: "yellow", children: "\u23F3 Executing..." }))] }), _jsx(Box, { borderStyle: "single", borderColor: "cyan", padding: 1, children: _jsxs(Text, { color: "cyan", children: ["$ ", input, _jsx(Text, { color: "gray", dimColor: true, children: isExecuting ? '' : '█' })] }) }), _jsx(Box, { padding: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "Press Enter to execute \u2022 Ctrl+C to exit \u2022 Type a command above" }) })] }));
+                                        .join(', '), "]"] }))] }), isExecuting && (_jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "Journey Progress: " }), _jsxs(Text, { color: "green", children: ["[", '█'.repeat(Math.floor(statusData.journeyProgress / 10)), '░'.repeat(10 - Math.floor(statusData.journeyProgress / 10)), "]", ' ', statusData.journeyProgress, "%"] })] }))] })), statusData?.mcpSuggestions && statusData.mcpSuggestions.length > 0 && (_jsxs(Box, { borderStyle: "single", borderColor: "magenta", padding: 1, children: [_jsx(Text, { color: "magenta", bold: true, children: "\uD83E\uDD16 AI Suggestions:" }), statusData.mcpSuggestions.slice(0, 3).map((suggestion, index) => (_jsxs(Box, { marginTop: 0, children: [_jsx(Text, { color: "cyan", children: suggestion.command }), _jsxs(Text, { color: "gray", children: [" - ", suggestion.description] })] }, index)))] })), _jsxs(Box, { flexGrow: 1, flexDirection: "column", padding: 1, children: [_jsx(Text, { color: "gray", children: "Output:" }), output.map((line, index) => (_jsx(Text, { children: line }, index))), isExecuting && (_jsx(Text, { color: "yellow", children: "\u23F3 Executing..." }))] }), _jsx(Box, { borderStyle: "single", borderColor: "cyan", padding: 1, children: _jsxs(Text, { color: "cyan", children: ["$ ", input, _jsx(Text, { color: "gray", dimColor: true, children: isExecuting ? '' : '█' })] }) }), _jsx(Box, { padding: 1, children: _jsx(Text, { color: "gray", dimColor: true, children: "Press Enter to execute \u2022 Ctrl+C to exit \u2022 Type a command above" }) })] }));
 };
 // CLI entry point
 const runTerminalUI = () => {
