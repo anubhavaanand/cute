@@ -27,7 +27,18 @@ export function showStatusLine(data: StatusData) {
   const dirColor = dirColors[(colorIndex + 3) % 6]; // Offset for different color
   const reset = '\x1b[0m';
   
-  const output = `${data.time} ${userColor}${data.username}${reset}@${dirColor}${data.currentDir}${reset} 🌍 ${data.weather.description} ${data.weather.temperature}°C | 📍 ${data.journey} | 📊 ${data.syscalls} syscalls`;
+  let output = `${data.time} ${userColor}${data.username}${reset}@${dirColor}${data.currentDir}${reset} 🌍 ${data.weather.description} ${data.weather.temperature}°C | 📍 ${data.journey} | 📊 ${data.syscalls} syscalls`;
+  
+  // Add syscall breakdown if available
+  if (data.traceResult && data.traceResult.syscallBreakdown.length > 0) {
+    const topSyscalls = data.traceResult.syscallBreakdown
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3)
+      .map(s => `${s.name}(${s.count})`)
+      .join(', ');
+    output += ` [${topSyscalls}]`;
+  }
+  
   console.log(output);
 }
 
