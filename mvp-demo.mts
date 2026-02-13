@@ -58,7 +58,7 @@ async function main() {
   });
 
   // Format output
-  const output = `${timeStr} 🌍 ${weather.description} ${weather.temperature}°C | 📍 ${journeyStr} | 📊 ${syscallCount} syscalls`;
+  const output = `${timeStr} 🌍 ${weather.description} ${weather.temperature}°C | 📍 ${journeyStr} | 📊 ${traceResult.totalSyscalls} syscalls`;
 
   showStatusLine({
     time: timeStr,
