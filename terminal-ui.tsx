@@ -163,7 +163,60 @@ const TerminalUI = () => {
 
 // CLI entry point
 const runTerminalUI = () => {
-  render(<TerminalUI />);
+  // Check if we're in a TTY environment
+  if (process.stdout.isTTY) {
+    render(<TerminalUI />);
+  } else {
+    // Fallback for non-TTY environments (like CI/CD or automated testing)
+    console.log('🌟 Custom Terminal - Interactive Mode');
+    console.log('Note: Running in non-interactive mode. Use a real terminal for full UI experience.');
+    console.log('');
+
+    // Run a simple demo command
+    const demoCommand = 'echo "Hello from Custom Terminal!"';
+    console.log(`$ ${demoCommand}`);
+
+    // Simulate the execution flow
+    setTimeout(async () => {
+      try {
+        const weather = await getWeather();
+        const journeySteps = getCommandJourney(demoCommand.split(' ')[0]);
+        const journeyStr = formatJourneyCompact(journeySteps);
+        const traceResult = await traceCommandSyscalls(demoCommand);
+
+        const username = process.env.USER || 'user';
+        const currentDir = process.cwd().split('/').pop() || '~';
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+
+        console.log(`✓ Command completed: ${demoCommand}`);
+        console.log('');
+        console.log('📊 Status Summary:');
+        console.log(`   Time: ${timeStr}`);
+        console.log(`   User: ${username}@${currentDir}`);
+        console.log(`   Weather: 🌤️ ${weather.description} ${weather.temperature}°C`);
+        console.log(`   Journey: 🧭 ${journeyStr}`);
+        console.log(`   Syscalls: 📊 ${traceResult.totalSyscalls} total`);
+        if (traceResult.syscallBreakdown.length > 0) {
+          const topSyscalls = traceResult.syscallBreakdown
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 3)
+            .map(s => `${s.name}(${s.count})`)
+            .join(', ');
+          console.log(`   Top syscalls: ${topSyscalls}`);
+        }
+        console.log('');
+        console.log('💡 To use the interactive UI, run this in a real terminal with TTY support.');
+      } catch (error) {
+        console.error(`✗ Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }, 100);
+  }
 };
 
 // Export for use in other modules
