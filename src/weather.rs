@@ -3,6 +3,9 @@
 
 use reqwest::Error;
 use serde::Deserialize;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct WeatherData {
@@ -22,21 +25,79 @@ struct CurrentWeather {
     weathercode: i32,
 }
 
+// Simple cache structure
+struct WeatherCache {
+    data: HashMap<String, (WeatherData, u64)>, // (data, timestamp)
+}
+
+impl WeatherCache {
+    fn new() -> Self {
+        WeatherCache {
+            data: HashMap::new(),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&WeatherData> {
+        if let Some((data, timestamp)) = self.data.get(key) {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            // Cache for 10 minutes (600 seconds)
+            if now - timestamp < 600 {
+                return Some(data);
+            }
+        }
+        None
+    }
+
+    fn insert(&mut self, key: String, data: WeatherData) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        self.data.insert(key, (data, timestamp));
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref WEATHER_CACHE: Mutex<WeatherCache> = Mutex::new(WeatherCache::new());
+}
+
 pub async fn fetch_weather(latitude: f32, longitude: f32) -> Result<WeatherData, Error> {
+    let cache_key = format!("{:.4},{:.4}", latitude, longitude);
+
+    // Check cache first
+    {
+        let cache = WEATHER_CACHE.lock().unwrap();
+        if let Some(cached_data) = cache.get(&cache_key) {
+            return Ok(cached_data.clone());
+        }
+    }
+
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current_weather=true",
         latitude, longitude
     );
     let response = reqwest::get(&url).await?;
     let data: OpenMeteoResponse = response.json().await?;
-    
+
     let description = get_weather_description(data.current_weather.weathercode);
-    
-    Ok(WeatherData {
+
+    let weather_data = WeatherData {
         temperature: data.current_weather.temperature,
         weathercode: data.current_weather.weathercode,
         description,
-    })
+    };
+
+    // Cache the result
+    {
+        let mut cache = WEATHER_CACHE.lock().unwrap();
+        cache.insert(cache_key, weather_data.clone());
+    }
+
+    Ok(weather_data)
 }
 
 fn get_weather_description(code: i32) -> String {
