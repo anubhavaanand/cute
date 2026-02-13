@@ -9,6 +9,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Rust build artifacts
+target/
+Cargo.lock
+
 # Environment variables
 .env
 .env.local
