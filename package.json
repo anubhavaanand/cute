@@ -2,16 +2,32 @@
   "name": "custom-terminal",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/mvp-demo.js",
+  "description": "Transparent Linux terminal with syscall visualization and weather theming",
+  "main": "dist/mvp-demo.mjs",
   "scripts": {
-    "start": "node dist/mvp-demo.js",
-    "build": "tsc mvp-demo.ts --outDir dist"
+    "build": "tsc",
+    "start": "npm run build && node dist/mvp-demo.mjs",
+    "dev": "npm run build && node dist/mvp-demo.mjs",
+    "clean": "rm -rf dist",
+    "ui": "npm run build && node dist/terminal-ui.js"
+  },
+  "keywords": [
+    "terminal",
+    "linux",
+    "visualization",
+    "syscall",
+    "weather"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "chalk": "^5.3.0",
+    "ink": "^4.4.1",
+    "react": "^18.2.0"
   }
 }

@@ -49,6 +49,10 @@ if [ $# -eq 0 ]; then
     COMMAND="sudo pacman -S neofetch"
     echo -e "${BLUE}📍 No command provided, using default:${NC}"
     echo -e "${YELLOW}  $COMMAND${NC}"
+elif [ "$1" = "ui" ]; then
+    echo -e "${BLUE}🎨 Starting Interactive Terminal UI...${NC}"
+    npm run ui
+    exit 0
 else
     COMMAND="$@"
     echo -e "${BLUE}📍 Running command:${NC}"
@@ -68,6 +72,7 @@ echo ""
 
 echo -e "${BLUE}💡 Tips:${NC}"
 echo "  • Run: ./quickstart.sh [command]"
+echo "  • UI: ./quickstart.sh ui"
 echo "  • Examples:"
 echo "    ./quickstart.sh npm install"
 echo "    ./quickstart.sh sudo apt update"
