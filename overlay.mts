@@ -1,55 +1,176 @@
-// overlay.mts - Terminal visualization and ANSI colors
+// overlay.mts - Advanced terminal visualization with animations and themes
 import { TraceResult } from './tracer.mjs';
 
 export interface StatusData {
   time: string;
-  weather: { description: string; temperature: number };
+  weather: { description: string; temperature: number; weathercode?: number };
   journey: string;
   syscalls: number;
   username: string;
   currentDir: string;
   traceResult?: TraceResult;
+  progress?: number; // 0-100 for command progress
+  currentStep?: string;
 }
 
+export interface OverlayComponent {
+  render(data: StatusData): string;
+  update?(): void;
+}
+
+// Animated icons that cycle
+export class AnimatedIcon {
+  private icons: string[];
+  private currentIndex: number = 0;
+  private lastUpdate: number = Date.now();
+
+  constructor(icons: string[], interval: number = 500) {
+    this.icons = icons;
+    this.lastUpdate = Date.now();
+  }
+
+  getIcon(): string {
+    const now = Date.now();
+    if (now - this.lastUpdate > 500) {
+      this.currentIndex = (this.currentIndex + 1) % this.icons.length;
+      this.lastUpdate = now;
+    }
+    return this.icons[this.currentIndex];
+  }
+}
+
+// Predefined animated icons
+export const animatedIcons = {
+  loading: new AnimatedIcon(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']),
+  weather: new AnimatedIcon(['☀️', '⛅', '☁️', '🌧️', '⛈️', '❄️']),
+  network: new AnimatedIcon(['🌐', '📡', '📶', '📱']),
+  filesystem: new AnimatedIcon(['💾', '💿', '📁', '📂'])
+};
+
+// Weather-based themes
+export function getWeatherTheme(weathercode: number): { bg: string; fg: string; accent: string } {
+  if (weathercode <= 1) return { bg: '\x1b[48;5;226m', fg: '\x1b[38;5;232m', accent: '\x1b[38;5;214m' }; // Sunny
+  if (weathercode <= 3) return { bg: '\x1b[48;5;250m', fg: '\x1b[38;5;232m', accent: '\x1b[38;5;244m' }; // Cloudy
+  if (weathercode >= 51) return { bg: '\x1b[48;5;39m', fg: '\x1b[38;5;15m', accent: '\x1b[38;5;27m' }; // Rainy
+  return { bg: '\x1b[48;5;255m', fg: '\x1b[38;5;232m', accent: '\x1b[38;5;240m' }; // Default
+}
+
+// Progress bar component
+export class ProgressBar implements OverlayComponent {
+  render(data: StatusData): string {
+    if (!data.progress) return '';
+    
+    const width = 30;
+    const filled = Math.round((data.progress / 100) * width);
+    const empty = width - filled;
+    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+    const percent = data.progress.toFixed(1);
+    
+    return `\x1b[32m[${bar}]\x1b[0m ${percent}% ${data.currentStep || ''}`;
+  }
+}
+
+// Status line component with animations
+export class StatusLine implements OverlayComponent {
+  private timeIcon = new AnimatedIcon(['🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚', '🕛']);
+  
+  render(data: StatusData): string {
+    const theme = data.weather.weathercode ? getWeatherTheme(data.weather.weathercode) : { bg: '', fg: '', accent: '\x1b[36m' };
+    const timeIcon = this.timeIcon.getIcon();
+    
+    // Color cycling for username and directory
+    const now = new Date();
+    const colorIndex = now.getSeconds() % 6;
+    const userColors = ['\x1b[31m', '\x1b[32m', '\x1b[33m', '\x1b[34m', '\x1b[35m', '\x1b[36m'];
+    const dirColors = ['\x1b[91m', '\x1b[92m', '\x1b[93m', '\x1b[94m', '\x1b[95m', '\x1b[96m'];
+    
+    const userColor = userColors[colorIndex];
+    const dirColor = dirColors[(colorIndex + 3) % 6];
+    const reset = '\x1b[0m';
+    
+    let output = `${timeIcon} ${data.time} ${userColor}${data.username}${reset}@${dirColor}${data.currentDir}${reset} `;
+    output += `${theme.accent}🌍 ${data.weather.description} ${data.weather.temperature}°C${reset} | `;
+    output += `📍 ${data.journey} | 📊 ${data.syscalls} syscalls`;
+    
+    // Add syscall breakdown if available
+    if (data.traceResult && data.traceResult.syscallBreakdown.length > 0) {
+      const topSyscalls = data.traceResult.syscallBreakdown
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3)
+        .map(s => `${s.name}(${s.count})`)
+        .join(', ');
+      output += ` [${topSyscalls}]`;
+    }
+    
+    return output;
+  }
+}
+
+// Journey visualization component
+export class JourneyVisualizer implements OverlayComponent {
+  render(data: StatusData): string {
+    if (!data.journey) return '';
+    
+    const steps = data.journey.split(' → ');
+    let visualization = '🚀 Journey: ';
+    
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const isLast = i === steps.length - 1;
+      
+      // Add animation for current step
+      if (data.currentStep && step.includes(data.currentStep)) {
+        visualization += `\x1b[32m${animatedIcons.loading.getIcon()} ${step}\x1b[0m`;
+      } else {
+        visualization += `${step}`;
+      }
+      
+      if (!isLast) visualization += ' → ';
+    }
+    
+    return visualization;
+  }
+}
+
+// Main overlay manager
+export class OverlayManager {
+  private components: OverlayComponent[] = [];
+  
+  addComponent(component: OverlayComponent) {
+    this.components.push(component);
+  }
+  
+  render(data: StatusData): string[] {
+    return this.components.map(comp => comp.render(data)).filter(line => line.length > 0);
+  }
+  
+  update() {
+    this.components.forEach(comp => {
+      if (comp.update) comp.update();
+    });
+  }
+}
+
+// Convenience functions
 export function showOverlay(message: string) {
   console.log(`[Overlay]: ${message}`);
 }
 
 export function showStatusLine(data: StatusData) {
-  // Color cycling for username and directory based on time
-  const now = new Date();
-  const colorIndex = now.getSeconds() % 6; // Cycle every second
-  
-  const userColors = ['\x1b[31m', '\x1b[32m', '\x1b[33m', '\x1b[34m', '\x1b[35m', '\x1b[36m']; // Red, Green, Yellow, Blue, Magenta, Cyan
-  const dirColors = ['\x1b[91m', '\x1b[92m', '\x1b[93m', '\x1b[94m', '\x1b[95m', '\x1b[96m']; // Bright versions
-  
-  const userColor = userColors[colorIndex];
-  const dirColor = dirColors[(colorIndex + 3) % 6]; // Offset for different color
-  const reset = '\x1b[0m';
-  
-  let output = `${data.time} ${userColor}${data.username}${reset}@${dirColor}${data.currentDir}${reset} 🌍 ${data.weather.description} ${data.weather.temperature}°C | 📍 ${data.journey} | 📊 ${data.syscalls} syscalls`;
-  
-  // Add syscall breakdown if available
-  if (data.traceResult && data.traceResult.syscallBreakdown.length > 0) {
-    const topSyscalls = data.traceResult.syscallBreakdown
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3)
-      .map(s => `${s.name}(${s.count})`)
-      .join(', ');
-    output += ` [${topSyscalls}]`;
-  }
-  
-  console.log(output);
+  const manager = new OverlayManager();
+  manager.addComponent(new StatusLine());
+  const lines = manager.render(data);
+  lines.forEach(line => console.log(line));
 }
 
 export function showStatusBar(data: StatusData) {
-  const bar = `┌─ ${data.time} ── Weather: ${data.weather.description} ${data.weather.temperature}°C ── Syscalls: ${data.syscalls} ─┐`;
-  const journey = `│ ${data.journey} │`;
-  const bottom = '└' + '─'.repeat(bar.length - 2) + '┘';
+  const manager = new OverlayManager();
+  manager.addComponent(new StatusLine());
+  manager.addComponent(new ProgressBar());
+  manager.addComponent(new JourneyVisualizer());
   
-  console.log(bar);
-  console.log(journey);
-  console.log(bottom);
+  const lines = manager.render(data);
+  lines.forEach(line => console.log(line));
 }
 
 export function createProgressBar(progress: number, width: number = 20): string {

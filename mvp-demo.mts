@@ -2,7 +2,7 @@
 
 import { getWeather, getWeatherMock } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
-import { showStatusLine } from './overlay.mjs';
+import { showStatusBar } from './overlay.mjs';
 import { traceCommandSyscalls, TraceResult } from './tracer.mjs';
 
 async function main() {
@@ -60,7 +60,7 @@ async function main() {
   // Format output
   const output = `${timeStr} 🌍 ${weather.description} ${weather.temperature}°C | 📍 ${journeyStr} | 📊 ${traceResult.totalSyscalls} syscalls`;
 
-  showStatusLine({
+  showStatusBar({
     time: timeStr,
     weather: weather,
     journey: journeyStr,
