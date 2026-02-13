@@ -3,6 +3,7 @@
 import { getWeather, getWeatherMock } from './weather.mjs';
 import { getCommandJourney, formatJourneyCompact } from './journey-visualizer.mjs';
 import { showStatusLine } from './overlay.mjs';
+import { traceCommandSyscalls, TraceResult } from './tracer.mjs';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -25,8 +26,23 @@ async function main() {
   const journey = getCommandJourney(command);
   const journeyStr = formatJourneyCompact(journey);
 
-  // Estimate syscalls
-  const syscallCount = estimateSyscalls(command);
+  // Trace actual syscalls
+  console.log(`[Overlay]: Tracing syscalls...`);
+  let traceResult: TraceResult;
+  try {
+    traceResult = await traceCommandSyscalls(command);
+    console.log(`[Overlay]: Traced ${traceResult.totalSyscalls} syscalls in ${traceResult.executionTime}ms`);
+  } catch (error) {
+    console.log(`[Overlay]: Tracing failed, using estimation`);
+    // Fallback to estimation
+    const estimated = estimateSyscalls(command);
+    traceResult = {
+      totalSyscalls: estimated,
+      syscallBreakdown: [],
+      executionTime: 0,
+      command
+    };
+  }
 
   // Get current user and directory
   const username = process.env.USER || process.env.USERNAME || 'user';
@@ -48,9 +64,10 @@ async function main() {
     time: timeStr,
     weather: weather,
     journey: journeyStr,
-    syscalls: syscallCount,
+    syscalls: traceResult.totalSyscalls,
     username: username,
-    currentDir: currentDir
+    currentDir: currentDir,
+    traceResult: traceResult
   });
 }
 

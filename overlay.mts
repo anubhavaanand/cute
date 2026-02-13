@@ -1,4 +1,5 @@
 // overlay.mts - Terminal visualization and ANSI colors
+import { TraceResult } from './tracer.mjs';
 
 export interface StatusData {
   time: string;
@@ -7,6 +8,7 @@ export interface StatusData {
   syscalls: number;
   username: string;
   currentDir: string;
+  traceResult?: TraceResult;
 }
 
 export function showOverlay(message: string) {
