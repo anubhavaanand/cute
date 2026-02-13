@@ -60,12 +60,16 @@ echo ""
 
 # Get command from arguments or use default
 if [ $# -eq 0 ]; then
-    COMMAND="sudo pacman -S neofetch"
+    COMMAND="echo 'Hello from Custom Terminal!'"
     echo -e "${BLUE}📍 No command provided, using default:${NC}"
     echo -e "${YELLOW}  $COMMAND${NC}"
 elif [ "$1" = "ui" ]; then
     echo -e "${BLUE}🎨 Starting Interactive Terminal UI...${NC}"
     npm run ui
+    exit 0
+elif [ "$1" = "rust" ]; then
+    echo -e "${BLUE}🦀 Starting Rust Terminal Backend...${NC}"
+    ./target/release/custom_terminal
     exit 0
 else
     COMMAND="$@"
@@ -87,6 +91,7 @@ echo ""
 echo -e "${BLUE}💡 Tips:${NC}"
 echo "  • Run: ./quickstart.sh [command]"
 echo "  • UI: ./quickstart.sh ui"
+echo "  • Rust Backend: ./quickstart.sh rust"
 echo "  • Examples:"
 echo "    ./quickstart.sh npm install"
 echo "    ./quickstart.sh sudo apt update"
