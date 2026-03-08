@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Implementation Roadmap
+    url: https://github.com/anubhavaanand/cute/blob/main/IMPLEMENTATION_ROADMAP.md
+    about: View the full Cortex Terminal implementation roadmap
+  - name: Discussions
+    url: https://github.com/anubhavaanand/cute/discussions
+    about: Ask questions, share ideas, or get help with Cortex Terminal

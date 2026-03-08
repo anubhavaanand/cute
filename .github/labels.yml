@@ -1,0 +1,62 @@
+# GitHub Labels for Cortex Terminal
+# These labels correspond to the four implementation phases and cross-cutting concerns.
+
+labels:
+  # ── Phase labels ──────────────────────────────────────────────────────────
+  - name: phase-a
+    color: "0075ca"
+    description: "Phase A: The Skeleton (System Integration)"
+
+  - name: phase-b
+    color: "e4e669"
+    description: "Phase B: The Cute UI/UX (Aesthetics)"
+
+  - name: phase-c
+    color: "a2eeef"
+    description: "Phase C: Feature Modules"
+
+  - name: phase-d
+    color: "d93f0b"
+    description: "Phase D: Testing & Distribution"
+
+  # ── Domain labels ─────────────────────────────────────────────────────────
+  - name: system-integration
+    color: "0052cc"
+    description: "IPC, PTY, and shell process management"
+
+  - name: ui-ux
+    color: "e11d74"
+    description: "Glassmorphism, themes, fonts, and visual design"
+
+  - name: features
+    color: "0e8a16"
+    description: "Tab management, file explorer, autocomplete"
+
+  - name: ci-cd
+    color: "fbca04"
+    description: "GitHub Actions workflows and automation"
+
+  - name: packaging
+    color: "b60205"
+    description: "AppImage, PKGBUILD/AUR, and distribution"
+
+  # ── Standard labels ───────────────────────────────────────────────────────
+  - name: bug
+    color: "d73a4a"
+    description: "Something isn't working"
+
+  - name: enhancement
+    color: "a2eeef"
+    description: "New feature or request"
+
+  - name: good first issue
+    color: "7057ff"
+    description: "Good for newcomers"
+
+  - name: help wanted
+    color: "008672"
+    description: "Extra attention is needed"
+
+  - name: documentation
+    color: "0075ca"
+    description: "Improvements or additions to documentation"
